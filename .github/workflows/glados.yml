@@ -3,12 +3,14 @@ name: GLaDOS Auto Checkin
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 4 * * *'
+    - cron: '0 4 * * *'   # 每日 UTC 4 点执行签到（北京时间 12 点）
+    - cron: '0 0 1 * *'   # 每月 1 号执行保活空提交
 
 jobs:
   checkin:
     runs-on: ubuntu-latest
-
+    permissions:
+      contents: read    # 签到任务只需读取代码
     steps:
       - uses: actions/checkout@v4
 
@@ -28,3 +30,27 @@ jobs:
           SENDKEY: ${{ secrets.SENDKEY }}
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
           COOKIES: ${{ secrets.COOKIES }}
+
+  # 每月保活任务：避免工作流被 GitHub 自动禁用
+  keepalive:
+    name: 每月空提交保活
+    # 仅在保活定时计划 '0 0 1 * *' 触发时运行，不会在每日签到或手动触发时执行
+    if: github.event_name == 'schedule' && github.event.schedule == '0 0 1 * *'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # 允许推送空提交
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 配置 Git 用户
+        run: |
+          git config user.name "xfxx2022"
+          git config user.email "1255104520@qq.com"
+
+      - name: 创建空提交并推送
+        run: |
+          git commit --allow-empty -m "chore: keepalive to prevent workflow suspension"
+          git push
