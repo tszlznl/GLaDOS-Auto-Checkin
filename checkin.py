@@ -7,26 +7,28 @@ from pypushdeer import PushDeer
 
 CHECKIN_URL = "https://glados.cloud/api/user/checkin"
 STATUS_URL = "https://glados.cloud/api/user/status"
+POINTS_CANDIDATES = [
+    "https://glados.cloud/api/user/points",
+    "https://glados.cloud/api/user/point",
+    "https://glados.cloud/api/user/balance",
+    "https://glados.cloud/api/user/info",
+]
 
 HEADERS_BASE = {
     "origin": "https://glados.cloud",
     "referer": "https://glados.cloud/console/checkin",
-    "user-agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
+    "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     "content-type": "application/json;charset=UTF-8",
 }
 
 PAYLOAD = {"token": "glados.cloud"}
 TIMEOUT = 10
 
-def push_deer(sckey: str, title: str, text: str):
+def push_deer(sckey, title, text):
     if sckey:
         PushDeer(pushkey=sckey).send_text(title, desp=text)
 
-def push_serverchan(sendkey: str, title: str, content: str):
+def push_serverchan(sendkey, title, content):
     if not sendkey:
         return
     url = f"https://sctapi.ftqq.com/{sendkey}.send"
@@ -44,7 +46,7 @@ def push_serverchan(sendkey: str, title: str, content: str):
     except Exception as e:
         print(f"⚠️ Server 酱推送异常: {e}")
 
-def push_all(sendkey_deer: str, sendkey_sc: str, title: str, content: str):
+def push_all(sendkey_deer, sendkey_sc, title, content):
     if sendkey_deer:
         push_deer(sendkey_deer, title, content)
     if sendkey_sc:
@@ -55,14 +57,33 @@ def push_all(sendkey_deer: str, sendkey_sc: str, title: str, content: str):
 def safe_json(resp):
     try:
         return resp.json()
-    except Exception:
+    except:
         return {}
 
-def get_points_from_data(data):
-    """从 status 接口的 data 字典中提取积分，支持多种字段名"""
-    for key in ["points", "point", "total_points", "balance"]:
-        if key in data and data[key] is not None:
-            return data[key]
+def get_points(session, headers):
+    """尝试从多个候选 URL 获取积分，返回整数或 None"""
+    for url in POINTS_CANDIDATES:
+        try:
+            resp = session.get(url, headers=headers, timeout=TIMEOUT)
+            if resp.status_code == 200:
+                j = safe_json(resp)
+                # 尝试常见的字段名
+                for key in ["points", "point", "balance", "total_points"]:
+                    if key in j:
+                        val = j[key]
+                        if isinstance(val, (int, float)):
+                            return int(val)
+                    if "data" in j and isinstance(j["data"], dict):
+                        for key2 in ["points", "point", "balance", "total_points"]:
+                            if key2 in j["data"]:
+                                val = j["data"][key2]
+                                if isinstance(val, (int, float)):
+                                    return int(val)
+                # 如果整个响应就是数字
+                if isinstance(j, (int, float)):
+                    return int(j)
+        except:
+            continue
     return None
 
 def main():
@@ -89,20 +110,19 @@ def main():
 
         try:
             # 签到请求
-            r = session.post(
-                CHECKIN_URL,
-                headers=headers,
-                data=json.dumps(PAYLOAD),
-                timeout=TIMEOUT,
-            )
+            r = session.post(CHECKIN_URL, headers=headers, data=json.dumps(PAYLOAD), timeout=TIMEOUT)
             j = safe_json(r)
             msg = j.get("message", "")
             msg_lower = msg.lower()
 
             if "got" in msg_lower:
                 ok += 1
-                # 签到接口可能返回本次获得点数，但不一定包含总计，所以还是依赖 status 接口
                 status = "✅ 成功"
+                # 签到成功时，可能直接返回 points
+                if "points" in j:
+                    points = j["points"]
+                elif "point" in j:
+                    points = j["point"]
             elif "repeat" in msg_lower or "already" in msg_lower:
                 repeat += 1
                 status = "🔁 已签到"
@@ -110,27 +130,22 @@ def main():
                 fail += 1
                 status = "❌ 失败"
 
-            # 状态接口（获取积分和剩余天数）
+            # 状态接口（获取邮箱、剩余天数）
             s = session.get(STATUS_URL, headers=headers, timeout=TIMEOUT)
-            sj_raw = safe_json(s)
-            sj = sj_raw.get("data") or {}
-
-            # 提取邮箱
+            sj = safe_json(s).get("data") or {}
             if sj.get("email"):
                 email = sj["email"]
-
-            # 剩余天数
             if sj.get("leftDays") is not None:
                 days = f"{int(float(sj['leftDays']))} 天"
 
-            # 积分（使用增强提取函数）
-            points_val = get_points_from_data(sj)
-            if points_val is not None:
-                points = points_val
-            else:
-                # 如果找不到，打印警告（仅第一次）
-                if idx == 1:
-                    print(f"⚠️ 未在状态响应中找到积分字段，响应结构: {list(sj.keys())}")
+            # 如果积分还未获取到，尝试额外请求
+            if points == "-":
+                pts = get_points(session, headers)
+                if pts is not None:
+                    points = pts
+                else:
+                    if idx == 1:
+                        print("⚠️ 无法获取积分，请检查 Cookie 或网络")
 
         except Exception as e:
             fail += 1
