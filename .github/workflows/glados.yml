@@ -20,14 +20,19 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests pypushdeer
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
 
       - name: Run checkin
         run: python checkin.py
         env:
+          COOKIES: ${{ secrets.COOKIES }}
           SENDKEY: ${{ secrets.SENDKEY }}
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
-          COOKIES: ${{ secrets.COOKIES }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
 
   keepalive:
     name: 每月空提交保活
