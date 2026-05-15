@@ -84,7 +84,6 @@ koa:sess=xxxxxx; koa:sess.sig=yyyyyy
 3. 在 GitHub Secrets 中添加：
    - **Name**：`PUSHPLUS_TOKEN`
    - **Value**：你的 PushPlus Token
-> ⚠️ **注意**：PushPlus 官方域名为 `www.pushplus.plus`，API 地址为 `https://www.pushplus.plus/send`。本项目已适配最新官方域名。
 #### 🔔 方式五：钉钉机器人
 通过钉钉群机器人推送通知，支持加签安全验证。
 1. 在钉钉群中添加自定义机器人
