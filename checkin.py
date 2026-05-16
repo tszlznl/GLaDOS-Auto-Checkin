@@ -6,7 +6,6 @@ import os
 import json
 import time
 import random
-import re
 import hashlib
 import hmac
 import base64
@@ -36,6 +35,10 @@ RETRY_MIN_WAIT = 2.0
 RETRY_MAX_WAIT = 10.0
 MIN_DELAY = 1.0
 MAX_DELAY = 2.0
+TELEGRAM_MAX_LENGTH = 4000
+TELEGRAM_TRUNCATE_LENGTH = 3990
+COOKIE_MASK_LENGTH = 10
+COOKIE_MIN_LENGTH = 20
 
 
 # ==================== 工具函数 ====================
@@ -71,9 +74,9 @@ def mask_email(email: str) -> str:
 
 def mask_cookie(cookie: str) -> str:
     """Cookie 脱敏（只显示前后各10个字符）"""
-    if not cookie or len(cookie) <= 20:
+    if not cookie or len(cookie) <= COOKIE_MIN_LENGTH:
         return "***"
-    return f"{cookie[:10]}...{cookie[-10:]}"
+    return f"{cookie[:COOKIE_MASK_LENGTH]}...{cookie[-COOKIE_MASK_LENGTH:]}"
 
 
 def validate_cookie(cookie: str) -> Tuple[bool, str]:
@@ -153,8 +156,8 @@ def push_telegram(bot_token: str, chat_id: str, title: str, content: str) -> Non
     if not bot_token or not chat_id:
         return
     text = f"{title}\n\n{content}"
-    if len(text) > 4000:
-        text = text[:3990] + "\n..."
+    if len(text) > TELEGRAM_MAX_LENGTH:
+        text = text[:TELEGRAM_TRUNCATE_LENGTH] + "\n..."
     try:
         r = requests.post(
             f"https://api.telegram.org/bot{bot_token}/sendMessage",
