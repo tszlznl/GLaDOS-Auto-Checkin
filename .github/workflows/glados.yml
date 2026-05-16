@@ -19,25 +19,20 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+        run: pip install requests
 
       - name: Run checkin
         run: python checkin.py
         env:
           COOKIES: ${{ secrets.COOKIES }}
-          # 推送渠道配置（按需填写）
           SENDKEY: ${{ secrets.SENDKEY }}
           SERVERCHAN_KEY: ${{ secrets.SERVERCHAN_KEY }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
@@ -52,12 +47,6 @@ jobs:
           YUNHU_RECV_ID: ${{ secrets.YUNHU_RECV_ID }}
           YUNHU_RECV_TYPE: ${{ secrets.YUNHU_RECV_TYPE }}
 
-      - name: Run tests (optional)
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          python -m pytest test_checkin.py -v || true
-        continue-on-error: true
-
   keepalive:
     name: 每月空提交保活
     if: github.event_name == 'schedule' && github.event.schedule == '0 0 1 * *'
@@ -68,8 +57,7 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
