@@ -1,0 +1,29 @@
+fix: 修复20项代码问题并优化项目质量
+
+涉及文件: checkin.py, requirements.txt(新增), .github/workflows/glados.yml
+
+【严重问题修复】
+- 删除 mask_cookie 函数中的不可达死代码(原L81-86)
+- 添加 raise_for_status() 使 HTTP 5xx 错误正确触发重试
+- 在 checkin_account 开头清除 Session 残留 Cookie 避免账号串扰
+- 无效 Cookie 验证失败时跳过执行并计入失败统计
+
+【中等问题修复】
+- 状态/积分查询的 except 块添加 logger.warning 日志输出
+- 新增 result 字段(ok/repeat/fail)替代 Emoji 字符串匹配统计
+- 新增 requirements.txt 锁定 requests==2.32.3 版本
+- 异常信息脱敏, 推送仅显示异常类型名(type(e).__name__)
+- 新增 safe_int() 函数安全转换 leftDays/points 数值
+- classify_checkin 参数类型改为 Any 并内部 int() 转换
+
+【代码质量优化】
+- 全文 print() 替换为 logging 模块(INFO/WARNING/ERROR)
+- session.post 改用 json= 参数替代手动 json.dumps 序列化
+- get_status 重命名为 api_get 更准确反映通用 GET 语义
+- 抽象 _push_request() 通用函数消除8个推送函数的重复代码
+- mask_email 添加空本地部分边界检查(name=""时直接返回)
+- checkin job 添加 if 条件避免每月1号保活触发重复签到
+- push_all 使用描述性变量名(pushdeer_key等)消除命名复用
+- HEADERS_BASE 拷贝改用 {**HEADERS_BASE} 字典展开语法
+- checkin_account 返回类型注解修正为 Dict[str, Any]
+- 工作流 pip install 改为 pip install -r requirements.txt

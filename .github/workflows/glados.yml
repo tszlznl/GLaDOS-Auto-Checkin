@@ -9,6 +9,7 @@ on:
 jobs:
   checkin:
     name: GLaDOS 签到
+    if: github.event_name != 'schedule' || github.event.schedule != '0 0 1 * *'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     concurrency:
@@ -27,7 +28,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install -r requirements.txt
 
       - name: Run checkin
         run: python checkin.py
