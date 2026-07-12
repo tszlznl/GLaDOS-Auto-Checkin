@@ -9,7 +9,7 @@
 ## ✨ 功能特性
 
 - ✅ 每天自动签到，已签到自动识别
-- 👥 支持多账号（用 `&` 连接）
+- 👥 支持多账号（`&` 或换行连接）
 - 📊 查询总积分和剩余天数
 - 📬 8 种推送渠道：PushDeer / Server酱 / Telegram / PushPlus / 钉钉 / 飞书 / 企业微信 / 云湖
 - 🔄 网络请求自动重试（指数退避）
@@ -25,8 +25,18 @@
 ```
 .
 ├── checkin.py                 # 签到脚本
-└── .github/workflows/
-    └── glados.yml             # GitHub Actions 配置
+├── requirements.txt           # 依赖锁定 (requests==2.32.3)
+├── tests/                     # 单元测试 (unittest)
+│   └── test_checkin.py
+├── .github/workflows/
+│   └── glados.yml             # GitHub Actions 配置
+└── .gitignore                 # 忽略构建产物 (__pycache__ 等)
+```
+
+运行测试：
+
+```bash
+python -m unittest discover -s tests -v
 ```
 
 ---
