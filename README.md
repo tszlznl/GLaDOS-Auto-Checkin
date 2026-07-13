@@ -9,7 +9,7 @@
 ## ✨ 功能特性
 
 - ✅ 每天自动签到，已签到自动识别
-- 👥 支持多账号（用 `&` 连接）
+- 👥 支持多账号（`|||`、`&` 或换行连接）
 - 📊 查询总积分和剩余天数
 - 📬 8 种推送渠道：PushDeer / Server酱 / Telegram / PushPlus / 钉钉 / 飞书 / 企业微信 / 云湖
 - 🔄 网络请求自动重试（指数退避）
@@ -83,17 +83,27 @@ koa:sess=xxxxxx; koa:sess.sig=yyyyyy
 | 企业微信机器人 | `WECOM_BOT_WEBHOOK` | - |
 | 云湖机器人 | `YUNHU_TOKEN` + `YUNHU_RECV_ID` | `YUNHU_RECV_TYPE` |
 
+> 🔑 **钉钉 / 飞书加签说明**：若机器人启用了「加签」校验，则 `DINGTALK_WEBHOOK` + `DINGTALK_SECRET`（或 `FEISHU_WEBHOOK` + `FEISHU_SECRET`）**必须同时配置**。只配 webhook 不配 secret 时，脚本会发送无签名请求并给出告警，加签机器人将鉴权失败。
+
 ---
 
 ## 👥 多账号配置
 
-多个账号的 Cookie 用 `&` 连接：
+多个账号的 Cookie 用 `|||`、`&` 或**换行**连接（三种分隔符均可混用，推荐使用 `|||` 以避免与 Cookie 值冲突）：
 
 ```
-cookie_账号1 & cookie_账号2 & cookie_账号3
+cookie_账号1 ||| cookie_账号2 ||| cookie_账号3
 ```
 
-⚠️ 不要换行，不要用逗号
+或
+
+```
+cookie_账号1
+cookie_账号2
+cookie_账号3
+```
+
+⚠️ Cookie 值本身不得包含 `|||`、`&` 或换行符，否则会被错误拆分。推荐使用 `|||` 作为分隔符，因为 Cookie 值中几乎不可能出现该字符串。
 
 ---
 

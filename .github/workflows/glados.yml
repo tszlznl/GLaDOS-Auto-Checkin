@@ -11,6 +11,7 @@ jobs:
     name: GLaDOS 签到
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    if: github.event_name != 'schedule' || github.event.schedule != '0 0 1 * *'
     concurrency:
       group: glados-checkin
       cancel-in-progress: false
@@ -27,7 +28,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install "requests==2.32.3" --no-cache-dir
 
       - name: Run checkin
         run: python checkin.py
@@ -52,6 +53,9 @@ jobs:
     if: github.event_name == 'schedule' && github.event.schedule == '0 0 1 * *'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    concurrency:
+      group: glados-keepalive
+      cancel-in-progress: false
 
     permissions:
       contents: write
