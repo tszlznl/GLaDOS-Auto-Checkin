@@ -29,6 +29,7 @@ logger = logging.getLogger("GLaDOS")
 CHECKIN_URL = "https://glados.cloud/api/user/checkin"
 STATUS_URL = "https://glados.cloud/api/user/status"
 POINTS_URL = "https://glados.cloud/api/user/points"
+EXCHANGE_URL = "https://glados.cloud/api/user/exchange"
 HEADERS_BASE = {
     "origin": "https://glados.cloud",
     "referer": "https://glados.cloud/console/checkin",
@@ -56,6 +57,13 @@ COOKIE_MASK_LENGTH = 10
 COOKIE_MIN_LENGTH = 24
 # 重复签到判定关键词（L5：提升为模块级常量，便于维护/国际化）
 REPEAT_KEYWORDS = ("repeat", "already", "重复", "已签到", "签到过", "请勿")
+# 积分兑换计划（#9 功能请求）：消耗 points 积分兑换 days 天会员。
+# 仅当用户显式配置 EXCHANGE_PLAN 时才执行，默认不兑换，避免静默消耗积分。
+EXCHANGE_PLANS = {
+    "plan100": {"points": 100, "days": 10},
+    "plan200": {"points": 200, "days": 30},
+    "plan500": {"points": 500, "days": 100},
+}
 
 
 # ==================== 工具函数 ====================
@@ -519,8 +527,29 @@ def api_get(session: requests.Session, url: str, headers: Dict[str, str]) -> Dic
     return require_json(r)  # 非 JSON 响应抛异常进入重试（M1）
 
 
-def checkin_account(session: requests.Session, cookie: str, index: int) -> Dict[str, Any]:
-    """执行单个账号的签到，返回账号信息字典"""
+@retry_on_failure()
+def exchange_request(session: requests.Session, headers: Dict[str, str], plan: str) -> Dict[str, Any]:
+    """
+    执行积分兑换请求（带重试，#9 功能请求）。
+
+    GLaDOS 兑换接口以表单形式提交 planType（plan100/plan200/plan500），
+    响应 JSON 中 code==0 表示兑换成功。
+    """
+    r = session.post(EXCHANGE_URL, headers=headers, data={"planType": plan}, timeout=TIMEOUT)
+    r.raise_for_status()
+    return require_json(r)  # 非 JSON 响应抛异常进入重试（M1）
+
+
+def checkin_account(
+    session: requests.Session,
+    cookie: str,
+    index: int,
+    exchange_plan: Optional[str] = None,
+) -> Dict[str, Any]:
+    """执行单个账号的签到，返回账号信息字典
+
+    exchange_plan: 积分兑换计划名（plan100/plan200/plan500），为 None 时不兑换。
+    """
     session.cookies.clear()  # 清除上一个账号的残留 Cookie，避免串扰
     headers = {**HEADERS_BASE}
     headers["cookie"] = cookie
@@ -528,9 +557,11 @@ def checkin_account(session: requests.Session, cookie: str, index: int) -> Dict[
     email = "unknown"
     days = "-"
     total_points = "-"
+    total_points_int = None  # 积分整数值，用于兑换阈值判断
     earned = 0
     status = ""
     result = "fail"
+    exchange_status = "-"  # 兑换结果描述（未配置时保持 "-"，不输出到日志）
 
     try:
         # 1. 签到
@@ -566,12 +597,45 @@ def checkin_account(session: requests.Session, cookie: str, index: int) -> Dict[
                 pts = (p.get("data") or {}).get("points")
             if pts is not None:
                 total_points = f"{safe_int_str(pts)} 积分"
+                try:
+                    total_points_int = int(float(pts))
+                except (TypeError, ValueError):
+                    total_points_int = None
         except requests.exceptions.HTTPError as e:
             resp = getattr(e, "response", None)
             status_code = getattr(resp, "status_code", "?") if resp is not None else "?"
             logger.warning("账号 %d 积分查询失败 (HTTP %s)", index, status_code)
         except Exception as e:  # noqa: BLE001
             logger.warning("账号 %d 积分查询失败: %s", index, e)
+
+        # 4. 积分兑换（#9，仅配置了 EXCHANGE_PLAN 时执行；默认关闭不影响现有功能）
+        #    兑换独立于签到结果，但仅在成功查到积分后尝试；失败不影响签到状态/退出码。
+        if exchange_plan and exchange_plan in EXCHANGE_PLANS:
+            req_pts = EXCHANGE_PLANS[exchange_plan]["points"]
+            days_gain = EXCHANGE_PLANS[exchange_plan]["days"]
+            if total_points_int is None:
+                exchange_status = "⚠️ 兑换跳过(积分查询失败)"
+                logger.warning("账号 %d 积分查询失败，跳过兑换", index)
+            elif total_points_int < req_pts:
+                exchange_status = f"⏭️ 积分不足({total_points_int}/{req_pts})"
+                logger.info(
+                    "账号 %d 积分 %d < %d，未达兑换阈值，跳过",
+                    index, total_points_int, req_pts,
+                )
+            else:
+                try:
+                    ex = exchange_request(session, headers, exchange_plan)
+                    ex_code = ex.get("code", -2)
+                    ex_msg = ex.get("message", "")
+                    if ex_code == 0:
+                        exchange_status = f"🎁 兑换成功(+{days_gain}天)"
+                        logger.info("账号 %d 积分兑换成功: %s", index, ex_msg)
+                    else:
+                        exchange_status = f"⚠️ 兑换失败({ex_msg})"
+                        logger.warning("账号 %d 积分兑换失败: %s", index, ex_msg)
+                except Exception as e:  # noqa: BLE001
+                    exchange_status = f"⚠️ 兑换异常({type(e).__name__})"
+                    logger.warning("账号 %d 积分兑换异常: %s", index, e)
 
     except Exception as e:  # noqa: BLE001
         logger.error("账号 %d 签到异常: %s", index, e)
@@ -585,6 +649,7 @@ def checkin_account(session: requests.Session, cookie: str, index: int) -> Dict[
         "result": result,
         "total_points": total_points,
         "remaining_days": days,
+        "exchange": exchange_status,
     }
 
 
@@ -593,6 +658,25 @@ def main() -> int:
     # H2：支持 ||| 或换行(\n)或 & 分隔多账号 Cookie；推荐使用 ||| 避免与 Cookie 值冲突
     raw = os.getenv("COOKIES", "")
     cookies = [c.strip() for c in re.split(r"\|\|\||[&\n]", raw) if c.strip()]
+
+    # #9：积分兑换计划（可选，默认关闭；仅显式配置且值合法时启用，避免静默消耗积分）
+    raw_plan = (os.getenv("EXCHANGE_PLAN") or os.getenv("GLADOS_EXCHANGE_PLAN") or "").strip()
+    if raw_plan:
+        if raw_plan in EXCHANGE_PLANS:
+            exchange_plan = raw_plan
+            logger.info(
+                "已启用积分兑换计划: %s (%d 积分 → %d 天)",
+                exchange_plan, EXCHANGE_PLANS[exchange_plan]["points"],
+                EXCHANGE_PLANS[exchange_plan]["days"],
+            )
+        else:
+            logger.warning(
+                "EXCHANGE_PLAN 值 '%s' 无效，可选: %s；本次跳过兑换",
+                raw_plan, "/".join(EXCHANGE_PLANS.keys()),
+            )
+            exchange_plan = None
+    else:
+        exchange_plan = None
 
     if not cookies:
         push_all("GLaDOS 签到", "❌ 未检测到 COOKIES，请配置 GitHub Secrets")
@@ -617,7 +701,7 @@ def main() -> int:
                 continue
 
             logger.info("正在处理账号 %d/%d...", idx, len(cookies))
-            acc = checkin_account(session, cookie, idx)
+            acc = checkin_account(session, cookie, idx, exchange_plan)
 
             if acc["result"] == "ok":
                 ok += 1
@@ -626,10 +710,14 @@ def main() -> int:
             else:
                 fail += 1
 
-            lines.append(
+            line = (
                 f"{acc['index']}. {acc['email']} | {acc['status']} | "
                 f"总积分:{acc['total_points']} | 剩余:{acc['remaining_days']}"
             )
+            # 仅当配置了兑换且产生实际兑换结果时追加，未配置时日志行格式保持不变
+            if acc.get("exchange") and acc["exchange"] != "-":
+                line += f" | 兑换:{acc['exchange']}"
+            lines.append(line)
 
             # 非最后一个账号时随机延迟
             if idx < len(cookies):
