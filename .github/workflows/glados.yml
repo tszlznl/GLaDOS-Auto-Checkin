@@ -47,6 +47,9 @@ jobs:
           YUNHU_TOKEN: ${{ secrets.YUNHU_TOKEN }}
           YUNHU_RECV_ID: ${{ secrets.YUNHU_RECV_ID }}
           YUNHU_RECV_TYPE: ${{ secrets.YUNHU_RECV_TYPE }}
+          # #9 积分兑换计划（可选；不配置则默认不兑换，不影响现有签到）
+          EXCHANGE_PLAN: ${{ secrets.EXCHANGE_PLAN }}
+          GLADOS_EXCHANGE_PLAN: ${{ secrets.GLADOS_EXCHANGE_PLAN }}
 
   keepalive:
     name: 每月空提交保活
